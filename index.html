@@ -1,80 +1,123 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>playlist</title>
-  <link rel="icon" type="image/png" href="favicon.png">
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: radial-gradient(circle at top, #1db954, #121212 60%);
-      color: white;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .card {
-      text-align: center;
-      padding: 30px;
-      background: rgba(0,0,0,0.6);
-      border-radius: 20px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-      width: 300px;
-    }
-
-    h1 {
-      margin: 0 0 10px;
-      font-size: 28px;
-    }
-
-    p {
-      opacity: 0.8;
-      font-size: 14px;
-      margin-bottom: 20px;
-    }
-
-    button {
-      background: #1db954;
-      border: none;
-      padding: 15px 20px;
-      border-radius: 50px;
-      font-size: 16px;
-      color: black;
-      cursor: pointer;
-      font-weight: bold;
-      transition: transform 0.1s ease;
-    }
-
-    button:hover {
-      transform: scale(1.05);
-    }
-
-    .small {
-      margin-top: 15px;
-      font-size: 12px;
-      opacity: 0.6;
-    }
-  </style>
+  <link rel="icon" type="image/png" href="favicon.png" />
 </head>
-<body>
+<body style="font-family:Arial;background:#121212;color:white;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
 
-  <div class="card">
-    <h1>🎧 Playlist</h1>
-    <p>Tap to open your music in Spotify</p>
+<div style="text-align:center;max-width:420px;">
+  <h1>🎧 Spotify Login App</h1>
+  <p>Click below to log in with Spotify</p>
 
-    <button onclick="openPlaylist()">Open Playlist</button>
+  <button onclick="login()" style="padding:12px 20px;border:none;border-radius:30px;background:#1db954;color:black;font-weight:bold;cursor:pointer;">
+    Log in with Spotify
+  </button>
 
-    <div class="small">Works best if you're logged into Spotify</div>
-  </div>
+  <div id="status" style="margin-top:20px;font-size:14px;opacity:0.8;"></div>
+</div>
 
-  <script>
-    function openPlaylist() {
-      window.open("https://open.spotify.com/playlist/66JijArich6jHznO7MzneL", "_blank");
+<script>
+const clientId = "YOUR_CLIENT_ID_HERE";
+const redirectUri = window.location.origin;
+const scopes = [
+  "user-read-email",
+  "playlist-read-private",
+  "streaming"
+];
+
+function generateRandomString(length) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+async function sha256(plain) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(plain);
+  return crypto.subtle.digest('SHA-256', data);
+}
+
+function base64urlencode(a) {
+  return btoa(String.fromCharCode.apply(null, new Uint8Array(a)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+async function createCodeChallenge(verifier) {
+  const hashed = await sha256(verifier);
+  return base64urlencode(hashed);
+}
+
+async function login() {
+  const verifier = generateRandomString(128);
+  const challenge = await createCodeChallenge(verifier);
+
+  localStorage.setItem('verifier', verifier);
+
+  const authUrl =
+    "https://accounts.spotify.com/authorize" +
+    "?client_id=" + clientId +
+    "&response_type=code" +
+    "&redirect_uri=" + encodeURIComponent(redirectUri) +
+    "&scope=" + encodeURIComponent(scopes.join(' ')) +
+    "&code_challenge_method=S256" +
+    "&code_challenge=" + challenge;
+
+  window.location = authUrl;
+}
+
+async function getToken(code) {
+  const verifier = localStorage.getItem('verifier');
+
+  const body = new URLSearchParams({
+    client_id: clientId,
+    grant_type: 'authorization_code',
+    code: code,
+    redirect_uri: redirectUri,
+    code_verifier: verifier
+  });
+
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
+  });
+
+  const data = await res.json();
+  return data;
+}
+
+async function handleRedirect() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+
+  if (code) {
+    document.getElementById('status').innerText = "Logging in...";
+
+    try {
+      const tokenData = await getToken(code);
+
+      document.getElementById('status').innerText =
+        "Logged in! Access token received (check console).";
+
+      console.log(tokenData);
+
+    } catch (e) {
+      document.getElementById('status').innerText = "Login failed.";
+      console.error(e);
     }
-  </script>
+  }
+}
 
-</body
+handleRedirect();
+</script>
+
+</body>
+</html>
